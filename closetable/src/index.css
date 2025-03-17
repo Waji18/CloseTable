@@ -1,0 +1,412 @@
+/* Global Styles */
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: #f8f9fa;
+}
+
+/* Navbar Styles */
+.navbar {
+  padding: 1rem 0; /* Add padding to the navbar */
+  background-color: #343a40 !important; /* Dark background */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); /* Add shadow for depth */
+}
+
+.navbar-brand {
+  font-size: 1.75rem; /* Larger brand text */
+  font-weight: bold;
+  color: #fff !important; /* White text */
+  transition: color 0.3s ease;
+}
+
+.navbar-brand:hover {
+  color: #007bff !important; /* Blue text on hover */
+}
+
+.nav-link {
+  font-size: 1.1rem; /* Larger nav links */
+  color: #fff !important; /* White text */
+  margin: 0 0.75rem; /* Add spacing between links */
+  transition: color 0.3s ease;
+}
+
+.nav-link:hover {
+  color: #007bff !important; /* Blue text on hover */
+}
+
+.navbar-toggler {
+  border: none; /* Remove border from toggler */
+}
+
+.navbar-toggler:focus {
+  box-shadow: none; /* Remove focus shadow */
+}
+
+/* Add a smooth transition for the navbar */
+.navbar {
+  transition: background-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Add a hover effect for the navbar */
+.navbar:hover {
+  background-color: #2c3136 !important; /* Slightly lighter dark background on hover */
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2); /* Stronger shadow on hover */
+}
+/* Search Bar Styles */
+.search-bar {
+  background-color: #ffffff;
+  padding: 20px 0;
+  margin-top: 80px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+}
+
+.search-bar .form-label {
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 5px;
+  display: flex;
+  align-items: center;
+}
+
+.search-bar .form-control {
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  padding: 10px;
+  font-size: 14px;
+}
+
+.search-bar .btn-primary {
+  background-color: #007bff;
+  border-color: #007bff;
+  padding: 10px 20px;
+  font-weight: bold;
+  border-radius: 8px;
+  transition: background-color 0.3s ease, transform 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.search-bar .btn-primary:hover {
+  background-color: #0056b3;
+  border-color: #0056b3;
+  transform: translateY(-2px);
+}
+
+/* Restaurant Card Styles */
+.restaurant-container {
+  display: flex;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  gap: 20px;
+  padding-bottom: 20px;
+}
+
+.restaurant-card {
+  flex: 0 0 auto;
+  width: 300px;
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.restaurant-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.restaurant-card img {
+  width: 100%;
+  height: 200px;
+  object-fit: cover;
+}
+
+.restaurant-card .card-body {
+  padding: 20px;
+  background-color: #ffffff;
+}
+
+.restaurant-card .card-title {
+  font-size: 1.25rem;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 10px;
+}
+
+.restaurant-card .card-text {
+  color: #666;
+  margin-bottom: 10px;
+}
+
+.restaurant-card .btn-primary {
+  background-color: #007bff;
+  border-color: #007bff;
+  padding: 10px 20px;
+  font-weight: bold;
+  border-radius: 8px;
+  transition: background-color 0.3s ease;
+}
+
+.restaurant-card .btn-primary:hover {
+  background-color: #0056b3;
+  border-color: #0056b3;
+}
+
+/* Restaurant Card Styles */
+.restaurant-card {
+  flex: 0 0 auto;
+  width: 300px;
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.restaurant-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.restaurant-image {
+  width: 100%;
+  height: 200px;
+  object-fit: cover;
+}
+
+.card-body {
+  padding: 20px;
+  background-color: #ffffff;
+}
+
+.card-title {
+  font-size: 1.25rem;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 10px;
+}
+
+.card-text {
+  color: #666;
+  margin-bottom: 10px;
+}
+
+.btn-primary {
+  background-color: #007bff;
+  border-color: #007bff;
+  padding: 10px 20px;
+  font-weight: bold;
+  border-radius: 8px;
+  transition: background-color 0.3s ease;
+}
+
+.btn-primary:hover {
+  background-color: #0056b3;
+  border-color: #0056b3;
+}
+
+/* Scroll Button Styles */
+.scroll-button {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background-color: rgba(0, 0, 0, 0.5);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  font-size: 1.5rem;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.scroll-button.left {
+  left: -20px;
+}
+
+.scroll-button.right {
+  right: -20px;
+}
+
+.scroll-button:hover {
+  background-color: rgba(0, 0, 0, 0.8);
+}
+
+/* Login and Signup Page Styles */
+.login-page,
+.signup-page {
+  background-color: #f8f9fa; /* Light background */
+}
+
+.card {
+  border-radius: 15px; /* Rounded corners */
+  border: none; /* Remove default border */
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.card:hover {
+  transform: translateY(-5px); /* Slight lift on hover */
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2); /* Stronger shadow on hover */
+}
+
+.card-title {
+  font-size: 2rem; /* Larger title */
+  font-weight: bold;
+  color: #343a40; /* Dark text */
+}
+
+.form-label {
+  font-weight: bold; /* Bold labels */
+  color: #343a40; /* Dark text */
+}
+
+.form-control {
+  border-radius: 10px; /* Rounded input fields */
+  border: 1px solid #ced4da; /* Light border */
+  padding: 10px; /* Add padding */
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.form-control:focus {
+  border-color: #007bff; /* Blue border on focus */
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25); /* Blue glow on focus */
+}
+
+.btn-primary {
+  background-color: #007bff; /* Blue button */
+  border: none; /* Remove border */
+  border-radius: 10px; /* Rounded button */
+  padding: 10px 20px; /* Add padding */
+  font-size: 1.1rem; /* Larger text */
+  transition: background-color 0.3s ease;
+}
+
+.btn-primary:hover {
+  background-color: #0056b3; /* Darker blue on hover */
+}
+
+.btn-outline-primary {
+  border-color: #007bff; /* Blue border */
+  color: #007bff; /* Blue text */
+  transition: all 0.3s ease;
+}
+
+.btn-outline-primary:hover {
+  background-color: #007bff; /* Blue background on hover */
+  color: #fff; /* White text on hover */
+}
+
+.text-primary {
+  color: #007bff !important; /* Blue text for links */
+}
+
+.text-primary:hover {
+  color: #0056b3 !important; /* Darker blue on hover */
+}
+
+.text-muted {
+  color: #6c757d !important; /* Muted text */
+}
+
+.fab {
+  font-size: 1.2rem; /* Icon size */
+}
+
+
+/* Restaurant Details Page Styles */
+.restaurant-details-page {
+  background-color: #f8f9fa; /* Light background for the page */
+}
+
+/* Hero Section */
+.restaurant-hero {
+  height: 500px; /* Adjust height as needed */
+  overflow: hidden;
+  position: relative;
+}
+
+.restaurant-hero-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* Ensure the image covers the container */
+}
+
+.hero-overlay {
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0.3)); /* Gradient overlay */
+}
+
+.hero-overlay h1 {
+  font-size: 4rem;
+  font-weight: bold;
+  text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.7); /* Text shadow for better visibility */
+}
+
+.hero-overlay p {
+  text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.5); /* Text shadow for better visibility */
+}
+
+/* Cards */
+.card {
+  border-radius: 20px; /* Rounded corners for cards */
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.card:hover {
+  transform: translateY(-10px); /* Slight lift on hover */
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3); /* Stronger shadow on hover */
+}
+
+/* Buttons */
+.btn-primary {
+  background-color: #007bff;
+  border-color: #007bff;
+  color: #fff;
+  transition: all 0.3s ease;
+}
+
+.btn-primary:hover {
+  background-color: #0056b3;
+  border-color: #0056b3;
+}
+
+.btn-outline-primary {
+  border-color: #007bff;
+  color: #007bff;
+  transition: all 0.3s ease;
+}
+
+.btn-outline-primary:hover {
+  background-color: #007bff;
+  color: #fff;
+}
+
+/* Typography */
+.text-dark {
+  color: #000 !important; /* Black text */
+}
+
+.text-primary {
+  color: #007bff !important; /* Blue text for links and icons */
+}
+
+.fw-bold {
+  font-weight: bold !important;
+}
+
+.fs-5 {
+  font-size: 1.25rem !important;
+}
+
+.fs-6 {
+  font-size: 1rem !important;
+}
+
+/* Icons */
+.fas {
+  font-size: 1.2rem;
+}
