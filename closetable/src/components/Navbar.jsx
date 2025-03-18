@@ -1,7 +1,11 @@
+// Navbar.jsx
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 const Navbar = () => {
+  const { user, logout } = useAuth();
+
   return (
     <nav className="navbar navbar-expand-lg navbar-dark bg-dark fixed-top shadow-lg">
       <div className="container">
@@ -26,12 +30,26 @@ const Navbar = () => {
                 Home
               </Link>
             </li>
-            <li className="nav-item">
-              <Link className="nav-link fs-5" to="/login">
-                Login
-              </Link>
-            </li>
-            
+            {user ? (
+              <>
+                <li className="nav-item">
+                  <span className="nav-link fs-5">
+                    Welcome, {user.name} ({user.email})
+                  </span>
+                </li>
+                <li className="nav-item">
+                  <button className="nav-link fs-5 btn btn-link" onClick={logout}>
+                    Logout
+                  </button>
+                </li>
+              </>
+            ) : (
+              <li className="nav-item">
+                <Link className="nav-link fs-5" to="/login">
+                  Login
+                </Link>
+              </li>
+            )}
           </ul>
         </div>
       </div>

@@ -1,11 +1,15 @@
+// src/main.jsx
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
-import 'bootstrap/dist/css/bootstrap.min.css'; // Bootstrap CSS
-import './index.css'; // Custom global styles
+import 'bootstrap/dist/css/bootstrap.min.css';
+import './index.css';
+import { AuthProvider } from './context/AuthContext.jsx'; // Correct import path
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <App />
+    <AuthProvider>
+      <App />
+    </AuthProvider>
   </React.StrictMode>
 );
