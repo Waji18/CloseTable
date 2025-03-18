@@ -10,11 +10,11 @@ def get_users():
         'users': [
             {
                 'id': 1,
-                'username': 'Ali'
+                'username': 'Wajahat'
             },
             {
                 'id': 2,
-                'username': 'Mujtaba'
+                'username': 'Sarfraz'
             }
         ]
     })
