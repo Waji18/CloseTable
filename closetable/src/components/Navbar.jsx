@@ -1,10 +1,30 @@
 // Navbar.jsx
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { Link } from "react-router-dom";
+import { useAuth0 } from "@auth0/auth0-react";
 
 const Navbar = () => {
-  const { user, logout } = useAuth();
+  const { user, loginWithRedirect, logout, isAuthenticated } = useAuth0();
+
+  const handleLogin = () => {
+    console.log("Initiating login from:", window.location.href);
+    loginWithRedirect({
+      authorizationParams: {
+        redirect_uri: window.location.origin,
+      },
+      appState: {
+        returnTo: window.location.pathname,
+      },
+    });
+  };
+
+  const handleLogout = () => {
+    console.log("Initiating logout from:", window.location.origin);
+    logout({
+      logoutParams: {
+        returnTo: window.location.origin,
+      },
+    });
+  };
 
   return (
     <nav className="navbar navbar-expand-lg navbar-dark bg-dark fixed-top shadow-lg">
@@ -12,6 +32,7 @@ const Navbar = () => {
         <Link className="navbar-brand fs-3 fw-bold" to="/">
           Close Table
         </Link>
+
         <button
           className="navbar-toggler"
           type="button"
@@ -23,6 +44,7 @@ const Navbar = () => {
         >
           <span className="navbar-toggler-icon"></span>
         </button>
+
         <div className="collapse navbar-collapse" id="navbarNav">
           <ul className="navbar-nav ms-auto">
             <li className="nav-item">
@@ -30,24 +52,31 @@ const Navbar = () => {
                 Home
               </Link>
             </li>
-            {user ? (
+
+            {isAuthenticated ? (
               <>
                 <li className="nav-item">
-                  <span className="nav-link fs-5">
-                    Welcome, {user.name} ({user.email})
+                  <span className="nav-link fs-5 text-white">
+                    Welcome, {user?.name || user?.email}
                   </span>
                 </li>
                 <li className="nav-item">
-                  <button className="nav-link fs-5 btn btn-link" onClick={logout}>
+                  <button
+                    className="nav-link fs-5 btn btn-link text-white"
+                    onClick={handleLogout}
+                  >
                     Logout
                   </button>
                 </li>
               </>
             ) : (
               <li className="nav-item">
-                <Link className="nav-link fs-5" to="/login">
+                <button
+                  className="nav-link fs-5 btn btn-link text-white"
+                  onClick={handleLogin}
+                >
                   Login
-                </Link>
+                </button>
               </li>
             )}
           </ul>
