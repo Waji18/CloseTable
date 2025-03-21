@@ -1,7 +1,7 @@
-import React, { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom'; // Import useNavigate
-import SearchBar from '../components/SearchBar';
-import restaurants from '../data';
+import React, { useState, useRef } from "react";
+import { useNavigate } from "react-router-dom"; // Import useNavigate
+import SearchBar from "../components/SearchBar";
+import restaurants from "../data";
 
 const Home = () => {
   const [filteredRestaurants, setFilteredRestaurants] = useState(restaurants);
@@ -10,8 +10,9 @@ const Home = () => {
 
   const handleSearch = ({ date, time, people, query }) => {
     const filtered = restaurants.filter((restaurant) => {
-      const matchesQuery = restaurant.name.toLowerCase().includes(query.toLowerCase()) ||
-                           restaurant.location.toLowerCase().includes(query.toLowerCase());
+      const matchesQuery =
+        restaurant.name.toLowerCase().includes(query.toLowerCase()) ||
+        restaurant.location.toLowerCase().includes(query.toLowerCase());
       return matchesQuery;
     });
     setFilteredRestaurants(filtered);
@@ -19,18 +20,18 @@ const Home = () => {
 
   const scrollLeft = () => {
     if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollBy({ left: -300, behavior: 'smooth' });
+      scrollContainerRef.current.scrollBy({ left: -300, behavior: "smooth" });
     }
   };
 
   const scrollRight = () => {
     if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollBy({ left: 300, behavior: 'smooth' });
+      scrollContainerRef.current.scrollBy({ left: 300, behavior: "smooth" });
     }
   };
 
   const handleReserveClick = (restaurant) => {
-    navigate('/restaurant-details', { state: { restaurant } }); // Navigate to details page
+    navigate("/restaurant-details", { state: { restaurant } }); // Navigate to details page
   };
 
   return (
@@ -46,15 +47,19 @@ const Home = () => {
                 alt={restaurant.name}
                 className="restaurant-image"
                 onError={(e) => {
-                  e.target.src = "https://via.placeholder.com/300x200?text=Image+Not+Found";
+                  e.target.src =
+                    "https://via.placeholder.com/300x200?text=Image+Not+Found";
                 }}
               />
               <div className="card-body">
                 <h5 className="card-title">{restaurant.name}</h5>
                 <p className="card-text">
-                  {restaurant.cuisine} • {restaurant.price} - {restaurant.location}
+                  {restaurant.cuisine} • {restaurant.price} -{" "}
+                  {restaurant.location}
                 </p>
-                <p>{restaurant.rating} ({restaurant.reviews} reviews)</p>
+                <p>
+                  {restaurant.rating} ({restaurant.reviews} reviews)
+                </p>
                 <p>Booked {restaurant.booked} times today</p>
                 <button
                   className="btn btn-primary"
@@ -66,8 +71,12 @@ const Home = () => {
             </div>
           ))}
         </div>
-        <button className="scroll-button left" onClick={scrollLeft}>&lt;</button>
-        <button className="scroll-button right" onClick={scrollRight}>&gt;</button>
+        <button className="scroll-button left" onClick={scrollLeft}>
+          &lt;
+        </button>
+        <button className="scroll-button right" onClick={scrollRight}>
+          &gt;
+        </button>
       </div>
     </div>
   );

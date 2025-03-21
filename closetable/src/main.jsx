@@ -1,24 +1,43 @@
 // src/main.jsx
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { BrowserRouter } from "react-router-dom";
+import { AuthProvider } from "./context/AuthContext";
 import App from "./App";
+import ErrorBoundary from "./components/ErrorBoundary";
+import LoadingSpinner from "./components/LoadingSpinner";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "./index.css";
-import { AuthProvider } from "./context/AuthContext.jsx"; // Correct import path
-import { Auth0Provider } from "@auth0/auth0-react";
+import axios from "axios";
 
-ReactDOM.createRoot(document.getElementById("root")).render(
+// Configure axios defaults
+axios.defaults.baseURL =
+  import.meta.env.VITE_API_URL || "http://localhost:8000";
+axios.defaults.withCredentials = true;
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.code === "ECONNABORTED") {
+      console.error("Connection timeout");
+    } else if (!error.response) {
+      console.error("Network error - check server connection");
+    }
+    return Promise.reject(error);
+  }
+);
+// Create root
+const root = ReactDOM.createRoot(document.getElementById("root"));
+
+root.render(
   <React.StrictMode>
-    <Auth0Provider
-      domain="dev-mmgxebfoapmo6770.us.auth0.com"
-      clientId="u7bQrroZiJFCPT6bglGKU1WFJ849rvBI"
-      authorizationParams={{
-        redirect_uri: window.location.origin,
-      }}
-    >
-      <AuthProvider>
-        <App />
-      </AuthProvider>
-    </Auth0Provider>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AuthProvider>
+          <React.Suspense fallback={<LoadingSpinner />}>
+            <App />
+          </React.Suspense>
+        </AuthProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   </React.StrictMode>
 );

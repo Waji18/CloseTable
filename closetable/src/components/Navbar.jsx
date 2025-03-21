@@ -1,35 +1,14 @@
-// Navbar.jsx
+import React from "react";
 import { Link } from "react-router-dom";
-import { useAuth0 } from "@auth0/auth0-react";
+import { useAuth } from "../context/AuthContext";
 
 const Navbar = () => {
-  const { user, loginWithRedirect, logout, isAuthenticated } = useAuth0();
-
-  const handleLogin = () => {
-    console.log("Initiating login from:", window.location.href);
-    loginWithRedirect({
-      authorizationParams: {
-        redirect_uri: window.location.origin,
-      },
-      appState: {
-        returnTo: window.location.pathname,
-      },
-    });
-  };
-
-  const handleLogout = () => {
-    console.log("Initiating logout from:", window.location.origin);
-    logout({
-      logoutParams: {
-        returnTo: window.location.origin,
-      },
-    });
-  };
+  const { user, logout } = useAuth();
 
   return (
-    <nav className="navbar navbar-expand-lg navbar-dark bg-dark fixed-top shadow-lg">
+    <nav className="navbar navbar-expand-lg navbar-dark bg-dark">
       <div className="container">
-        <Link className="navbar-brand fs-3 fw-bold" to="/">
+        <Link className="navbar-brand" to="/">
           Close Table
         </Link>
 
@@ -46,37 +25,43 @@ const Navbar = () => {
         </button>
 
         <div className="collapse navbar-collapse" id="navbarNav">
-          <ul className="navbar-nav ms-auto">
+          <ul className="navbar-nav me-auto">
             <li className="nav-item">
-              <Link className="nav-link fs-5" to="/">
+              <Link className="nav-link" to="/">
                 Home
               </Link>
             </li>
+            <li className="nav-item">
+              <Link className="nav-link" to="/about">
+                About
+              </Link>
+            </li>
+            {user && (
+              <li className="nav-item">
+                <Link className="nav-link" to="/dashboard">
+                  Dashboard
+                </Link>
+              </li>
+            )}
+          </ul>
 
-            {isAuthenticated ? (
+          <ul className="navbar-nav">
+            {user ? (
               <>
                 <li className="nav-item">
-                  <span className="nav-link fs-5 text-white">
-                    Welcome, {user?.name || user?.email}
-                  </span>
+                  <span className="nav-link">Welcome, {user.name}</span>
                 </li>
                 <li className="nav-item">
-                  <button
-                    className="nav-link fs-5 btn btn-link text-white"
-                    onClick={handleLogout}
-                  >
+                  <button className="btn btn-link nav-link" onClick={logout}>
                     Logout
                   </button>
                 </li>
               </>
             ) : (
               <li className="nav-item">
-                <button
-                  className="nav-link fs-5 btn btn-link text-white"
-                  onClick={handleLogin}
-                >
+                <Link className="nav-link" to="/login">
                   Login
-                </button>
+                </Link>
               </li>
             )}
           </ul>

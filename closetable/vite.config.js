@@ -9,4 +9,11 @@ export default defineConfig({
     strictPort: true,
   },
   plugins: [react()],
+  proxy: {
+    "/api": {
+      target: "http://localhost:8000",
+      changeOrigin: true,
+      secure: false,
+    },
+  },
 });

@@ -1,97 +1,106 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+// src/pages/Login.jsx
+import React, { useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import GoogleLogin from "../components/GoogleLogin";
 
 const Login = () => {
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-  });
-  const { login } = useAuth();
+  const [formData, setFormData] = useState({ email: "", password: "" });
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { login, googleLogin } = useAuth();
   const navigate = useNavigate();
 
-  const handleChange = (e) => {
-    const { id, value } = e.target;
-    setFormData((prevData) => ({
-      ...prevData,
-      [id]: value,
-    }));
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      await login(formData.email, formData.password);
+      navigate("/dashboard"); // Redirect to dashboard on successful login
+    } catch (err) {
+      if (err.response && err.response.data && err.response.data.error) {
+        setError(err.response.data.error);
+      } else {
+        setError("Login failed. Please try again.");
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const users = JSON.parse(localStorage.getItem('users')) || [];
-    const user = users.find(
-      (u) => u.email === formData.email && u.password === formData.password
-    );
-    if (user) {
-      login(user); // Log the user in
-      navigate('/'); // Redirect to home page
-    } else {
-      alert('Invalid email or password');
+  const handleGoogleSuccess = async (response) => {
+    try {
+      await googleLogin(response);
+      navigate("/dashboard"); // Redirect to dashboard on successful Google login
+    } catch (error) {
+      setError("Google login failed. Please try again.");
     }
+  };
+
+  const handleGoogleFailure = (response) => {
+    setError("Google login failed. Please try again.");
   };
 
   return (
     <div className="login-page d-flex align-items-center justify-content-center min-vh-100 bg-light">
-      <div className="card shadow-lg p-4 p-lg-5" style={{ width: '100%', maxWidth: '500px' }}>
-        <div className="card-body text-center">
-          <h2 className="card-title mb-4 fw-bold">Login</h2>
+      <div
+        className="card shadow-lg p-4"
+        style={{ maxWidth: "500px", width: "90%" }}
+      >
+        <div className="card-body">
+          <h2 className="card-title text-center mb-4">Login</h2>
+          {error && <div className="alert alert-danger">{error}</div>}
+
           <form onSubmit={handleSubmit}>
             <div className="mb-3">
-              <label htmlFor="email" className="form-label text-start w-100">
-                Email
-              </label>
+              <label className="form-label">Email</label>
               <input
                 type="email"
                 className="form-control"
-                id="email"
-                placeholder="Enter your email"
                 value={formData.email}
-                onChange={handleChange}
+                onChange={(e) =>
+                  setFormData({ ...formData, email: e.target.value })
+                }
                 required
+                pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$"
               />
             </div>
+
             <div className="mb-3">
-              <label htmlFor="password" className="form-label text-start w-100">
-                Password
-              </label>
+              <label className="form-label">Password</label>
               <input
                 type="password"
                 className="form-control"
-                id="password"
-                placeholder="Enter your password"
                 value={formData.password}
-                onChange={handleChange}
+                onChange={(e) =>
+                  setFormData({ ...formData, password: e.target.value })
+                }
                 required
+                minLength="8"
               />
             </div>
-            <div className="d-flex justify-content-between mb-4">
-              <a href="/forgot-email" className="text-decoration-none text-primary">
-                Forgot Email?
-              </a>
-              <a href="/forgot-password" className="text-decoration-none text-primary">
-                Forgot Password?
-              </a>
-            </div>
-            <button type="submit" className="btn btn-primary w-100 btn-lg mb-3">
-              Login
-            </button>
-            <div className="text-muted mb-3">or</div>
+
             <button
-              type="button"
-              className="btn btn-outline-primary w-100 btn-lg mb-3 d-flex align-items-center justify-content-center"
+              type="submit"
+              className="btn btn-primary w-100 mb-3"
+              disabled={loading}
             >
-              <i className="fab fa-google me-2"></i> Sign Up with Google
+              {loading ? "Logging in..." : "Login"}
             </button>
+
+            <GoogleLogin
+              onSuccess={handleGoogleSuccess}
+              onFailure={handleGoogleFailure}
+            />
           </form>
-          <div className="mt-4">
-            <p className="mb-0">
-              Don't have an account?{' '}
-              <a href="/signup" className="text-decoration-none text-primary">
-                Sign Up
-              </a>
-            </p>
+
+          <div className="mt-3 text-center">
+            Don't have an account?{" "}
+            <Link to="/signup" className="text-primary text-decoration-none">
+              Sign Up
+            </Link>
           </div>
         </div>
       </div>

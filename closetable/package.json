@@ -11,10 +11,13 @@
   },
   "dependencies": {
     "@auth0/auth0-react": "^2.3.0",
+    "@react-oauth/google": "^0.12.1",
     "axios": "^1.8.3",
     "bootstrap": "^5.3.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-error-boundary": "^5.0.0",
+    "react-google-button": "^0.8.0",
     "react-icons": "^5.5.0",
     "react-router-dom": "^7.3.0"
   },
