@@ -36,7 +36,7 @@ const Navbar = () => {
                 About
               </Link>
             </li>
-            {user && (
+            {user && user.role === "Restaurant owner" && (
               <li className="nav-item">
                 <Link className="nav-link" to="/dashboard">
                   Dashboard

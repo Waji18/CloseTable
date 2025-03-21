@@ -108,7 +108,6 @@ def check_if_token_revoked(jwt_header, jwt_payload):
 def google_auth():
     try:
         data = request.get_json()
-        app.logger.debug(f"Google login data: {data}")
         email = data.get('email')
         name = data.get('name')
         google_id = data.get('googleId')
@@ -132,20 +131,20 @@ def google_auth():
                 "refresh_token": refresh_token,
                 "user": {
                     "id": str(user["_id"]),
-                    "username": user["username"],
+                    "name": user.get("username", ""),  # Use username field
                     "email": user["email"],
-                    "role": user.get("role", "Customer")
+                    "role": user.get("role", "Customer")  # Updated default role
                 }
             }), 200
         else:
-            # Create new user
+            # Create new user with updated role
             new_user = {
                 "username": name,
                 "email": email,
                 "google_id": google_id,
                 "password": None,  # Google users don't have passwords
                 "created_at": datetime.now(timezone.utc),
-                "role": "Customer",
+                "role": "Customer",  # Updated default role
                 "verified": True
             }
             
@@ -159,9 +158,9 @@ def google_auth():
                 "refresh_token": refresh_token,
                 "user": {
                     "id": str(result.inserted_id),
-                    "username": name,
+                    "name": name,
                     "email": email,
-                    "role": "Customer"
+                    "role": "Customer"  # Updated default role
                 }
             }), 200
             

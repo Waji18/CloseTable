@@ -10,7 +10,7 @@ const Signup = () => {
     username: "",
     email: "",
     password: "",
-    role: "user",
+    role: "Customer",
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
