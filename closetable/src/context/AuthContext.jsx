@@ -11,50 +11,7 @@ export const AuthProvider = ({ children }) => {
   const [tokens, setTokens] = useState(null);
   const navigate = useNavigate();
 
-  // Google login function
-  const googleLogin = async (googleUser) => {
-    try {
-      const response = await api.post("/api/auth/google", {
-        email: googleUser.email,
-        name: googleUser.name,
-        googleId: googleUser.googleId,
-      });
-
-      setTokens({
-        access_token: response.data.access_token,
-        refresh_token: response.data.refresh_token,
-        expiryDate: Date.now() + 15 * 60 * 1000,
-      });
-      setUser({
-        id: response.data.user.id,
-        name: response.data.user.username,
-        email: response.data.user.email,
-        role: response.data.user.role,
-      });
-      localStorage.setItem(
-        "authState",
-        JSON.stringify({
-          user: {
-            id: response.data.user.id,
-            name: response.data.user.username,
-            email: response.data.user.email,
-            role: response.data.user.role,
-          },
-          tokens: {
-            access_token: response.data.access_token,
-            refresh_token: response.data.refresh_token,
-            expiryDate: Date.now() + 15 * 60 * 1000,
-          },
-        })
-      );
-      navigate("/");
-    } catch (error) {
-      console.error("Google login failed:", error);
-      throw error;
-    }
-  };
-
-  // Existing login function
+  // Login function
   const login = async (email, password) => {
     try {
       const response = await api.post("/api/login", { email, password });
@@ -63,18 +20,22 @@ export const AuthProvider = ({ children }) => {
         refresh_token: response.data.refresh_token,
         expiryDate: Date.now() + 15 * 60 * 1000,
       });
+
       setUser({
         id: response.data.user.id,
-        name: response.data.user.username,
+        first_name: response.data.user.first_name,
+        last_name: response.data.user.last_name,
         email: response.data.user.email,
         role: response.data.user.role,
       });
+
       localStorage.setItem(
         "authState",
         JSON.stringify({
           user: {
             id: response.data.user.id,
-            name: response.data.user.username,
+            first_name: response.data.user.first_name,
+            last_name: response.data.user.last_name,
             email: response.data.user.email,
             role: response.data.user.role,
           },
@@ -91,7 +52,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Existing logout function
+  // Logout function
   const logout = async () => {
     try {
       await api.post("/api/logout");
@@ -105,7 +66,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Refresh token functionality remains the same
+  // Token refresh logic
   useEffect(() => {
     let refreshInterval;
     if (tokens && tokens.access_token && tokens.refresh_token) {
@@ -121,7 +82,7 @@ export const AuthProvider = ({ children }) => {
       const decoded = decodeToken(accessToken);
       if (decoded && decoded.exp) {
         const expirationTime = decoded.exp * 1000;
-        const timeUntilExpiration = expirationTime - Date.now() - 60000; // Refresh 1 minute before expiry
+        const timeUntilExpiration = expirationTime - Date.now() - 60000;
 
         if (timeUntilExpiration > 0) {
           refreshInterval = setInterval(() => {
@@ -165,7 +126,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Check for existing auth state on app load
+  // Initial auth check
   useEffect(() => {
     const savedAuthState = localStorage.getItem("authState");
     if (savedAuthState) {
@@ -187,7 +148,7 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
-  // Add token to API requests
+  // Set auth header
   useEffect(() => {
     if (tokens && tokens.access_token) {
       api.defaults.headers.common[
@@ -198,37 +159,8 @@ export const AuthProvider = ({ children }) => {
     }
   }, [tokens]);
 
-  // Idle timeout functionality
-  useEffect(() => {
-    let idleTimer;
-    const resetIdleTimer = () => {
-      clearTimeout(idleTimer);
-      idleTimer = setTimeout(() => {
-        logout();
-      }, 3600000); // 1 hour of inactivity
-    };
-
-    // Listen for user activity
-    document.addEventListener("mousemove", resetIdleTimer);
-    document.addEventListener("keypress", resetIdleTimer);
-    document.addEventListener("scroll", resetIdleTimer);
-    document.addEventListener("click", resetIdleTimer);
-    document.addEventListener("touchstart", resetIdleTimer);
-
-    resetIdleTimer(); // Start the timer
-
-    return () => {
-      clearTimeout(idleTimer);
-      document.removeEventListener("mousemove", resetIdleTimer);
-      document.removeEventListener("keypress", resetIdleTimer);
-      document.removeEventListener("scroll", resetIdleTimer);
-      document.removeEventListener("click", resetIdleTimer);
-      document.removeEventListener("touchstart", resetIdleTimer);
-    };
-  }, [logout]);
-
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, googleLogin }}>
+    <AuthContext.Provider value={{ user, loading, login, logout }}>
       {!loading && children}
     </AuthContext.Provider>
   );

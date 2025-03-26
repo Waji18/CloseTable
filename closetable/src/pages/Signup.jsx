@@ -2,61 +2,41 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import GoogleLogin from "../components/GoogleLogin";
-import axios from "axios";
+import api from "../api/index";
 
 const Signup = () => {
   const [formData, setFormData] = useState({
-    username: "",
+    first_name: "",
+    last_name: "",
     email: "",
     password: "",
-    role: "Customer",
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { googleLogin } = useAuth();
+  const { login } = useAuth();
 
   const validateForm = () => {
     setError("");
 
-    if (!formData.username) {
-      setError("Username is required");
-      return false;
-    }
-    if (!formData.email) {
-      setError("Email is required");
-      return false;
-    }
-    if (!formData.password) {
-      setError("Password is required");
+    if (!formData.first_name.trim()) {
+      setError("First name is required");
       return false;
     }
 
-    const emailRegex = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/;
+    if (!formData.last_name.trim()) {
+      setError("Last name is required");
+      return false;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.email)) {
       setError("Invalid email format");
       return false;
     }
 
-    if (formData.password.length < 10) {
-      setError("Password must be at least 10 characters");
-      return false;
-    }
-    if (!/[A-Z]/.test(formData.password)) {
-      setError("Password must contain at least one uppercase letter");
-      return false;
-    }
-    if (!/[a-z]/.test(formData.password)) {
-      setError("Password must contain at least one lowercase letter");
-      return false;
-    }
-    if (!/\d/.test(formData.password)) {
-      setError("Password must contain at least one number");
-      return false;
-    }
-    if (!/[!@#$%^&*(),.?":{}|<>]/.test(formData.password)) {
-      setError("Password must contain at least one special character");
+    if (formData.password.length < 6) {
+      setError("Password must be at least 6 characters");
       return false;
     }
 
@@ -73,54 +53,21 @@ const Signup = () => {
         return;
       }
 
-      const response = await axios.post(
-        "/api/signup",
-        {
-          username: formData.username,
-          email: formData.email,
-          password: formData.password,
-          role: formData.role,
-        },
-        {
-          timeout: 10000, // 10-second timeout
-        }
-      );
+      const response = await api.post("/api/signup", formData);
 
       if (response.status === 201) {
-        navigate("/login");
-      } else {
-        setError("Signup failed. Please try again.");
+        await login(formData.email, formData.password);
+        navigate("/");
       }
     } catch (err) {
       let errorMessage = "Signup failed. Please try again.";
-
-      if (err.code === "ECONNABORTED") {
-        errorMessage =
-          "Connection timed out. Please check your internet connection.";
-      } else if (err.response && err.response.data && err.response.data.error) {
+      if (err.response?.data?.error) {
         errorMessage = err.response.data.error;
-      } else if (err.message) {
-        errorMessage = err.message;
       }
-
       setError(errorMessage);
-      console.error("Signup error:", err);
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleGoogleSuccess = async (response) => {
-    try {
-      await googleLogin(response);
-      navigate("/dashboard"); // Redirect to dashboard on successful Google signup
-    } catch (error) {
-      setError("Google signup failed. Please try again.");
-    }
-  };
-
-  const handleGoogleFailure = () => {
-    setError("Google signup failed. Please try again.");
   };
 
   return (
@@ -133,20 +80,33 @@ const Signup = () => {
           <h2 className="card-title text-center mb-4">Sign Up</h2>
           {error && <div className="alert alert-danger">{error}</div>}
           <form onSubmit={handleSubmit}>
-            <div className="mb-3">
-              <label className="form-label">Username</label>
-              <input
-                type="text"
-                className="form-control"
-                value={formData.username}
-                onChange={(e) =>
-                  setFormData({ ...formData, username: e.target.value })
-                }
-                required
-                minLength="3"
-                maxLength="50"
-              />
+            <div className="row mb-3">
+              <div className="col">
+                <label className="form-label">First Name</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={formData.first_name}
+                  onChange={(e) =>
+                    setFormData({ ...formData, first_name: e.target.value })
+                  }
+                  required
+                />
+              </div>
+              <div className="col">
+                <label className="form-label">Last Name</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={formData.last_name}
+                  onChange={(e) =>
+                    setFormData({ ...formData, last_name: e.target.value })
+                  }
+                  required
+                />
+              </div>
             </div>
+
             <div className="mb-3">
               <label className="form-label">Email</label>
               <input
@@ -159,6 +119,7 @@ const Signup = () => {
                 required
               />
             </div>
+
             <div className="mb-3">
               <label className="form-label">Password</label>
               <input
@@ -169,23 +130,11 @@ const Signup = () => {
                   setFormData({ ...formData, password: e.target.value })
                 }
                 required
-                minLength="10"
+                minLength="6"
               />
+              <small className="text-muted">At least 6 characters</small>
             </div>
-            <div className="mb-3">
-              <label className="form-label">Role</label>
-              <select
-                className="form-select"
-                value={formData.role}
-                onChange={(e) =>
-                  setFormData({ ...formData, role: e.target.value })
-                }
-                required
-              >
-                <option value="Customer">Customer</option>
-                <option value="Resturant owner">Resturant owner</option>
-              </select>
-            </div>
+
             <button
               type="submit"
               className="btn btn-primary w-100 mb-3"
@@ -193,11 +142,6 @@ const Signup = () => {
             >
               {loading ? "Signing up..." : "Sign Up"}
             </button>
-
-            <GoogleLogin
-              onSuccess={handleGoogleSuccess}
-              onFailure={handleGoogleFailure}
-            />
 
             <div className="mt-3 text-center">
               Already have an account?{" "}

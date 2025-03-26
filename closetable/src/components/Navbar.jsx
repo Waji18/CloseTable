@@ -31,11 +31,14 @@ const Navbar = () => {
                 Home
               </Link>
             </li>
-            <li className="nav-item">
-              <Link className="nav-link" to="/about">
-                About
-              </Link>
-            </li>
+
+            {user && user.role === "Customer" && (
+              <li className="nav-item">
+                <Link className="nav-link" to="/dashboard">
+                  Dashboard
+                </Link>
+              </li>
+            )}
             {user && user.role === "Restaurant owner" && (
               <li className="nav-item">
                 <Link className="nav-link" to="/dashboard">
@@ -43,6 +46,11 @@ const Navbar = () => {
                 </Link>
               </li>
             )}
+            <li className="nav-item">
+              <Link className="nav-link" to="/about">
+                About
+              </Link>
+            </li>
           </ul>
 
           <ul className="navbar-nav">

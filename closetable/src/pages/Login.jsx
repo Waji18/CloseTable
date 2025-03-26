@@ -2,13 +2,12 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import GoogleLogin from "../components/GoogleLogin";
 
 const Login = () => {
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const { login, googleLogin } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -18,29 +17,16 @@ const Login = () => {
 
     try {
       await login(formData.email, formData.password);
-      navigate("/dashboard"); // Redirect to dashboard on successful login
+      navigate("/");
     } catch (err) {
-      if (err.response && err.response.data && err.response.data.error) {
+      if (err.response?.data?.error) {
         setError(err.response.data.error);
       } else {
-        setError("Login failed. Please try again.");
+        setError("Login failed. Please check your credentials");
       }
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleGoogleSuccess = async (response) => {
-    try {
-      await googleLogin(response);
-      navigate("/dashboard"); // Redirect to dashboard on successful Google login
-    } catch (error) {
-      setError("Google login failed. Please try again.");
-    }
-  };
-
-  const handleGoogleFailure = (response) => {
-    setError("Google login failed. Please try again.");
   };
 
   return (
@@ -64,7 +50,6 @@ const Login = () => {
                   setFormData({ ...formData, email: e.target.value })
                 }
                 required
-                pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$"
               />
             </div>
 
@@ -78,7 +63,7 @@ const Login = () => {
                   setFormData({ ...formData, password: e.target.value })
                 }
                 required
-                minLength="8"
+                minLength="6"
               />
             </div>
 
@@ -89,11 +74,6 @@ const Login = () => {
             >
               {loading ? "Logging in..." : "Login"}
             </button>
-
-            <GoogleLogin
-              onSuccess={handleGoogleSuccess}
-              onFailure={handleGoogleFailure}
-            />
           </form>
 
           <div className="mt-3 text-center">
