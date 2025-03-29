@@ -2,7 +2,7 @@
 # Ensure you have at the top
 import sys
 from werkzeug.exceptions import HTTPException
-
+import pytz
 from unittest import skip
 from flask import Flask, json, jsonify, request, abort, send_file
 from flask_pymongo import DESCENDING, PyMongo, ASCENDING
@@ -13,6 +13,7 @@ from flask_jwt_extended import (
     JWTManager, create_access_token, create_refresh_token,
     jwt_required, get_jwt_identity, get_jwt
 )
+from cryptography.fernet import Fernet
 from functools import wraps
 import bcrypt
 import re
@@ -192,6 +193,28 @@ def log_role_change(admin_id, user_id, old_role, new_role):
 # ========================
 # Input Validation Enhancements (Add near existing helper functions)
 # ========================
+def validate_opening_hours(hours):
+    required_days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+    time_format = re.compile(r"^([0-1][0-9]|2[0-3]):[0-5][0-9]$")
+    
+    if not all(day in hours for day in required_days):
+        return False
+    for day in required_days:
+        if not time_format.match(hours[day]["open"]) or not time_format.match(hours[day]["close"]):
+            return False
+    return True
+
+
+
+def validate_future_datetime(dt_str):
+    try:
+        dt = datetime.fromisoformat(dt_str.replace('Z', '+00:00')).astimezone(timezone.utc)
+        if dt <= datetime.now(timezone.utc):
+            return False
+        return True
+    except ValueError:
+        return False
+
 
 def validate_datetime(dt_str):
     try:
@@ -220,9 +243,12 @@ def sanitize_input(data: dict):
     }
 
 def get_pagination_params():
-    page = int(request.args.get('page', 1))
-    per_page = min(int(request.args.get('per_page', 10)), 100)
-    return page, per_page
+    try:
+        page = max(1, int(request.args.get('page', 1)))
+        per_page = min(max(1, int(request.args.get('per_page', 10))), 100)
+        return page, per_page
+    except ValueError:
+        abort(400, "Invalid pagination parameters")
 
 def validate_price(price):
     try:
@@ -318,6 +344,12 @@ def upgrade_user_role():
                 if user['role'] != 'Customer':
                     abort(400, 'Only customers can upgrade roles')
 
+                # Check for required business credentials
+                required_fields = ["encrypted_ssn", "encrypted_business_license"]
+                if not all(user.get(field) for field in required_fields):
+                    abort(400, 'Complete business profile required')
+
+                # Check for existing restaurant submissions
                 existing_restaurants = mongo.db.restaurants.count_documents({
                     "owner_id": ObjectId(current_user_id),
                     "status": {"$nin": ["rejected", "deleted"]}
@@ -326,18 +358,17 @@ def upgrade_user_role():
                 if existing_restaurants > 0:
                     abort(400, 'Cannot upgrade with active restaurants')
 
-                # Create role upgrade request
-                request_id = mongo.db.role_upgrade_requests.insert_one({
-                    "user_id": ObjectId(current_user_id),
-                    "requested_role": "Restaurant Owner",
-                    "status": "pending",
-                    "created_at": datetime.now(timezone.utc)
-                }, session=session).inserted_id
+                # Automatically upgrade role
+                mongo.db.users.update_one(
+                    {"_id": ObjectId(current_user_id)},
+                    {"$set": {"role": "Restaurant Owner"}},
+                    session=session
+                )
 
                 return jsonify({
-                    "message": "Upgrade request submitted",
-                    "request_id": str(request_id)
-                }), 201
+                    "message": "Role upgraded to Restaurant Owner",
+                    "new_role": "Restaurant Owner"
+                }), 200
 
         except PyMongoError as e:
             session.abort_transaction()
@@ -345,7 +376,7 @@ def upgrade_user_role():
             abort(500, "Database error")
 
 @app.route("/api/login", methods=["POST"])
-@limiter.limit("10 per minute")
+@limiter.limit("10/minute")  # On login/signup
 def login():
     try:
         data = request.get_json()
@@ -381,7 +412,7 @@ def login():
         return jsonify({"error": "Login failed"}), 500
 
 @app.route("/api/signup", methods=["POST"])
-@limiter.limit("5 per minute")
+@limiter.limit("10/minute")  # On login/signup
 def signup():
     try:
         data = sanitize_input(request.get_json())
@@ -392,18 +423,33 @@ def signup():
         if mongo.db.users.find_one({"email": data["email"]}):
             return jsonify({"error": "Email already exists"}), 409
 
+        # Initialize encryption
+        cipher = Fernet(os.getenv("ENCRYPTION_KEY"))
+        
+        # Hash password with bcrypt
         hashed_pw = bcrypt.hashpw(
-         data["password"].encode('utf-8'), 
-         bcrypt.gensalt()
-        ).decode('utf-8')      
+            data["password"].encode('utf-8'), 
+            bcrypt.gensalt()
+        ).decode('utf-8')
+
+        # Encrypt sensitive fields
+        encrypted_data = {
+            "encrypted_ssn": cipher.encrypt(data.get("ssn", "").encode()).decode(),
+            "encrypted_business_license": cipher.encrypt(data.get("business_license", "").encode()).decode()
+        }
+
         user_doc = {
-            **data,
+            "first_name": data["first_name"],
+            "last_name": data["last_name"],
+            "email": data["email"],
             "password": hashed_pw,
             "role": "Customer",
             "created_at": datetime.now(timezone.utc),
             "verified": False,
-            "saved_restaurants": []
+            "saved_restaurants": [],
+            **encrypted_data
         }
+
         result = mongo.db.users.insert_one(user_doc)
         return jsonify({"message": "User created", "user_id": str(result.inserted_id)}), 201
     except Exception as e:
@@ -417,8 +463,15 @@ def upload_image():
     try:
         current_user_id = ObjectId(get_jwt_identity())
         user = mongo.db.users.find_one({"_id": current_user_id})
-        if user['role'] not in ['Restaurant Owner', 'Admin']:
-            abort(403)
+       
+        restaurant_id = request.form.get('restaurant_id')
+        if restaurant_id:
+            restaurant = mongo.db.restaurants.find_one({
+                "_id": ObjectId(restaurant_id),
+                "owner_id": current_user_id
+            })
+            if not restaurant and user["role"] != "Admin":
+                abort(403, "Not authorized for this restaurant")
 
         if 'file' not in request.files:
             abort(400, description="No file part")
@@ -505,10 +558,9 @@ def get_restaurants():
             'total': total,
             'page': page,
             'per_page': per_page
-        })
+        }), 200
 
-        restaurants = list(mongo.db.restaurants.find(query))
-        return jsonify(json.loads(dumps(restaurants))), 200
+       
     
     except Exception as e:
          app.logger.error(f"Error: {str(e)}")
@@ -519,51 +571,77 @@ def get_restaurants():
 def create_restaurant():
     try:
         user_id = ObjectId(get_jwt_identity())
-        user = mongo.db.users.find_one({"_id": user_id})
         
-        # Automatically upgrade Customer to Restaurant Owner
-        if user["role"] == "Customer":
-            # Update user role first
-            mongo.db.users.update_one(
-                {"_id": user_id},
-                {"$set": {"role": "Restaurant Owner"}}
-            )
-            user["role"] = "Restaurant Owner"  # Update local user object
+        with mongo.client.start_session() as session:
+            with session.start_transaction():
+                user = mongo.db.users.find_one(
+                    {"_id": user_id},
+                    session=session
+                )
 
-        # Verify permissions
-        if user["role"] not in ["Restaurant Owner", "Admin"]:
-            abort(403, "Requires restaurant owner privileges")
+                # Check for existing restaurants
+                existing = mongo.db.restaurants.count_documents({
+                    "owner_id": user_id,
+                    "status": {"$nin": ["rejected", "deleted"]}
+                }, session=session)
+                
+                if existing > 0:
+                    abort(400, "You already have an active restaurant submission")
 
-        # Prevent multiple restaurant submissions
-        existing = mongo.db.restaurants.find_one({
-            "owner_id": user_id,
-            "status": {"$nin": ["rejected", "deleted"]}
-        })
-        if existing:
-            abort(400, "You already have an active restaurant submission")
+                if user["role"] == "Customer":
+                    required_fields = ["encrypted_ssn", "encrypted_business_license"]
+                    if not all(user.get(field) for field in required_fields):
+                        abort(400, "Complete business profile required before restaurant submission")
 
-        # Create restaurant with pending status
-        data = request.get_json()
-        restaurant = {
-            "name": bleach.clean(data["name"]).strip(),
-            "address": bleach.clean(data["address"]).strip(),
-            "city/location": bleach.clean(data["city/location"]).strip(),
-            "cuisine": bleach.clean(data.get("cuisine", "")).strip(),
-            "description": bleach.clean(data.get("description", "")).strip(),
-            "owner_id": user_id,
-            "status": "pending",
-            "created_at": datetime.now(timezone.utc),
-            "updated_at": datetime.now(timezone.utc)
-        }
+                # Upgrade customer to restaurant owner
+                if user["role"] == "Customer":
+                    mongo.db.users.update_one(
+                        {"_id": user_id},
+                        {"$set": {"role": "Restaurant Owner"}},
+                        session=session
+                    )
 
-        result = mongo.db.restaurants.insert_one(restaurant)
-        return jsonify({
-            "message": "Restaurant submitted for approval",
-            "restaurant_id": str(result.inserted_id)
-        }), 201
+                # Verify permissions after potential upgrade
+                if user["role"] not in ["Restaurant Owner", "Admin"]:
+                    abort(403, "Requires restaurant owner privileges")
 
+                # Create restaurant
+                data = request.get_json()
+
+                if not validate_opening_hours(data.get("opening_hours", {})):
+                   abort(400, "Invalid opening hours format")
+                if not isinstance(data.get("capacity", 0), int) or data["capacity"] <= 0:
+                   abort(400, "Invalid capacity value")
+
+                restaurant = {
+                    "name": bleach.clean(data["name"]).strip(),
+                    "address": bleach.clean(data["address"]).strip(),
+                    "city": bleach.clean(data["city"]).strip(),
+                    "cuisine": bleach.clean(data.get("cuisine", "")).strip(),
+                    "opening_hours": data["opening_hours"],
+                    "capacity": data["capacity"],
+                    "timezone": data.get("timezone", "UTC"),
+                    "description": bleach.clean(data.get("description", "")).strip(),
+                    "owner_id": user_id,
+                    "status": "pending",
+                    "created_at": datetime.now(timezone.utc),
+                    "updated_at": datetime.now(timezone.utc)
+                }
+
+                result = mongo.db.restaurants.insert_one(restaurant, session=session)
+                
+                return jsonify({
+                    "message": "Restaurant submitted for approval",
+                    "restaurant_id": str(result.inserted_id),
+                    "new_role": "Restaurant Owner" if user["role"] == "Customer" else None
+                }), 201
+
+    except PyMongoError as e:
+        session.abort_transaction()
+        app.logger.error(f"Database error: {str(e)}")
+        return jsonify({"error": "Restaurant submission failed"}), 500
     except Exception as e:
-        app.logger.error(f"Restaurant creation error: {str(e)}")
+        app.logger.error(f"Error: {str(e)}")
         return jsonify({"error": "Restaurant submission failed"}), 500
     
 @app.route("/api/restaurants/<id>", methods=["GET"])
@@ -585,6 +663,107 @@ def get_restaurant(id):
     except PyMongoError as e:
         app.logger.error(f"MongoDB error: {str(e)}")
         return jsonify({"error": "Database error"}), 500
+@app.route("/api/restaurants/<id>/availability", methods=["GET"])
+def get_availability(id):
+    try:
+        date_str = request.args.get("date")
+        if not date_str:
+            abort(400, "Date parameter required")
+            
+        target_date = datetime.fromisoformat(date_str)
+        restaurant = mongo.db.restaurants.find_one({"_id": ObjectId(id)})
+        
+        if not restaurant:
+            abort(404, "Restaurant not found")
+        
+        # Get day of week
+        day_of_week = target_date.strftime("%A").lower()
+        opening = restaurant["opening_hours"].get(day_of_week, {})
+        
+        if not opening.get("open") or not opening.get("close"):
+            return jsonify({"available_slots": []})
+        
+        # Generate time slots
+        open_time = datetime.strptime(opening["open"], "%H:%M").time()
+        close_time = datetime.strptime(opening["close"], "%H:%M").time()
+        current = datetime.combine(target_date, open_time)
+        end = datetime.combine(target_date, close_time)
+        slot_duration = timedelta(minutes=30)
+        
+        available_slots = []
+        while current < end:
+            slot_end = current + slot_duration
+            # Check existing reservations
+            reserved = mongo.db.reservations.count_documents({
+                "restaurant_id": ObjectId(id),
+                "datetime": {
+                    "$gte": current,
+                    "$lt": slot_end
+                }
+            })
+            if reserved < restaurant["capacity"]:
+                available_slots.append(current.isoformat())
+            current += slot_duration
+        
+        return jsonify({"available_slots": available_slots})
+    
+    except ValueError:
+        abort(400, "Invalid date format")
+    except Exception as e:
+        app.logger.error(f"Availability error: {str(e)}")
+        return jsonify({"error": "Failed to check availability"}), 500
+
+@app.route("/api/my-restaurants", methods=["GET"])
+@jwt_required()
+def get_my_restaurants():
+    try:
+        user_id = ObjectId(get_jwt_identity())
+        user = mongo.db.users.find_one({"_id": user_id})
+        
+        if user["role"] not in ["Restaurant Owner", "Admin"]:
+            abort(403, "Requires restaurant owner privileges")
+
+        page, per_page = get_pagination_params()
+        status_filter = request.args.get("status")
+
+        # Get status counts
+        status_pipeline = [
+            {"$match": {"owner_id": user_id}},
+            {"$group": {
+                "_id": "$status",
+                "count": {"$sum": 1}
+            }}
+        ]
+        status_counts = {item["_id"]: item["count"] for item in mongo.db.restaurants.aggregate(status_pipeline)}
+
+        # Build query
+        query = {"owner_id": user_id}
+        if status_filter in ["pending", "approved", "rejected"]:
+            query["status"] = status_filter
+
+        # Get paginated results
+        total = mongo.db.restaurants.count_documents(query)
+        restaurants = list(mongo.db.restaurants.find(query)
+            .sort("created_at", DESCENDING)
+            .skip((page-1)*per_page)
+            .limit(per_page))
+
+        return jsonify({
+            "data": {
+                "restaurants": json.loads(dumps(restaurants)),
+                "status_counts": status_counts
+            },
+            "pagination": {
+                "total": total,
+                "page": page,
+                "per_page": per_page,
+                "total_pages": (total + per_page - 1) // per_page
+            }
+        }), 200
+
+    except Exception as e:
+        app.logger.error(f"Error fetching restaurants: {str(e)}")
+        return jsonify({"error": "Failed to retrieve restaurants"}), 500        
 
 @app.route("/api/restaurants/<id>", methods=["PUT"])
 @jwt_required()
@@ -594,7 +773,8 @@ def update_restaurant(id):
         restaurant = mongo.db.restaurants.find_one({"_id": ObjectId(id)})
         
         
-        
+        if restaurant["status"] == "approved" and "name" in request.json:
+            abort(400, "Cannot change name of approved restaurant")
 
 
         if not restaurant:
@@ -611,7 +791,7 @@ def update_restaurant(id):
         updates = {
             "name": bleach.clean(data.get("name", restaurant["name"])).strip(),
             "address": bleach.clean(data.get("address", restaurant["address"])).strip(),
-            "city/location": bleach.clean(data.get("city/location", restaurant["city/location"])).strip(),
+            "city": bleach.clean(data.get("city", restaurant["city"])).strip(),
             "cuisine": bleach.clean(data.get("cuisine", restaurant["cuisine"])).strip(),
             "description": bleach.clean(data.get("description", restaurant["description"])).strip(),
             "updated_at": datetime.now(timezone.utc)
@@ -650,6 +830,7 @@ def delete_restaurant(id):
         user_id = ObjectId(get_jwt_identity())
         restaurant = mongo.db.restaurants.find_one({"_id": ObjectId(id)})
         fs = GridFS(mongo.db)
+
         for image_id in restaurant.get('images', []):
             if fs.exists(image_id):
                fs.delete(image_id)
@@ -739,24 +920,95 @@ def create_reservation():
     try:
         data = request.get_json()
         datetime_utc = datetime.fromisoformat(data["datetime"].replace('Z', '+00:00')).astimezone(timezone.utc)
-        restaurant = mongo.db.restaurants.find_one({
-            "_id": ObjectId(data["restaurant_id"]),
-            "status": "approved"
-        })
-        if not restaurant:
-            return jsonify({"error": "Restaurant not available"}), 400
+        
+        # Validate reservation parameters
+        if not validate_future_datetime(data["datetime"]):
+            abort(400, "Reservation must be in the future")
+        if not validate_datetime(data["datetime"]):
+            abort(400, "Invalid datetime format")
 
-        reservation = {
-            "user_id": ObjectId(get_jwt_identity()),
-            "restaurant_id": ObjectId(data["restaurant_id"]),
-            
-            "party_size": int(data["party_size"]),
-            "datetime": datetime_utc,
-            "status": "confirmed",
-            "created_at": datetime.now(timezone.utc)
-        }
-        result = mongo.db.reservations.insert_one(reservation)
+        restaurant_id = ObjectId(data["restaurant_id"])
+        party_size = int(data["party_size"])
+        
+        # Validate party size
+        if party_size <= 0:
+            abort(400, "Invalid party size")
+
+        with mongo.client.start_session() as session:
+            with session.start_transaction():
+                # Get restaurant with capacity check
+                restaurant = mongo.db.restaurants.find_one(
+                    {"_id": restaurant_id, "status": "approved"},
+                    session=session
+                )
+                if not restaurant:
+                    abort(400, "Restaurant not available")
+
+                if party_size > restaurant["capacity"]:
+                    abort(400, "Party size exceeds restaurant capacity")
+
+                # Convert to restaurant's local time
+                local_tz = pytz.timezone(restaurant["timezone"])
+                local_time = datetime_utc.astimezone(local_tz)
+                day_of_week = local_time.strftime("%A").lower()
+                
+                try:
+                    opening = restaurant["opening_hours"][day_of_week]
+                except KeyError:
+                    abort(400, "Restaurant is closed on this day")
+
+                # Time validation
+                open_time = datetime.strptime(opening["open"], "%H:%M").time()
+                close_time = datetime.strptime(opening["close"], "%H:%M").time()
+                if not (open_time <= local_time.time() < close_time):
+                    abort(400, "Restaurant is closed at this time")
+
+                # Calculate time slot with transaction
+                slot_start = local_time.replace(second=0, microsecond=0)
+                if local_time.minute >= 30:
+                    slot_start = slot_start.replace(minute=30)
+                else:
+                    slot_start = slot_start.replace(minute=0)
+
+                slot_end = slot_start + timedelta(minutes=30)
+                
+                # Get total reservations in slot with party sizes
+                pipeline = [
+                    {"$match": {
+                        "restaurant_id": restaurant_id,
+                        "datetime": {
+                            "$gte": slot_start.astimezone(timezone.utc),
+                            "$lt": slot_end.astimezone(timezone.utc)
+                        }
+                    }},
+                    {"$group": {
+                        "_id": None,
+                        "total_people": {"$sum": "$party_size"}
+                    }}
+                ]
+                result = list(mongo.db.reservations.aggregate(pipeline, session=session))
+                total_people = result[0]["total_people"] if result else 0
+
+                if (total_people + party_size) > restaurant["capacity"]:
+                    abort(400, "Not enough capacity for this time slot")
+
+                # Create reservation
+                reservation = {
+                    "user_id": ObjectId(get_jwt_identity()),
+                    "restaurant_id": restaurant_id,
+                    "party_size": party_size,
+                    "datetime": datetime_utc,
+                    "status": "confirmed",
+                    "created_at": datetime.now(timezone.utc)
+                }
+                result = mongo.db.reservations.insert_one(reservation, session=session)
+                session.commit_transaction()
+
         return jsonify({"id": str(result.inserted_id)}), 201
+    except PyMongoError as e:
+        session.abort_transaction()
+        app.logger.error(f"Reservation transaction error: {str(e)}")
+        return jsonify({"error": "Reservation failed"}), 500
     except Exception as e:
         app.logger.error(f"Reservation error: {str(e)}")
         return jsonify({"error": "Reservation failed"}), 500
@@ -778,16 +1030,24 @@ def manage_reservation(id):
             "owner_id": user_id
         })
         
+        
         if reservation["user_id"] != user_id and not is_owner and user["role"] != "Admin":
             return jsonify({"error": "Unauthorized"}), 403
 
         if request.method == "PUT":
             data = request.get_json()
             updates = {}
+
+
             if "datetime" in data:
              updates["datetime"] = datetime.fromisoformat(
                data["datetime"].replace('Z', '+00:00')
                  ).astimezone(timezone.utc)
+             
+             if "datetime" in data:
+                if not validate_future_datetime(data["datetime"]):
+                 abort(400, "Reservation must be in the future")
+
             if "party_size" in data:
                 updates["party_size"] = int(data["party_size"])
             if "status" in data and user["role"] in ["Restaurant Owner", "Admin"]:
@@ -832,36 +1092,50 @@ def get_menu_items():
 def create_menu_item():
     try:
         data = request.get_json()
+        restaurant_id = ObjectId(data["restaurant_id"])
+        
+        # Validate price
         if not validate_price(data.get("price")):
             return jsonify({"error": "Invalid price"}), 400
 
+        # Image validation
+        image_id = None
         if data.get("image"):
             if not ObjectId.is_valid(data["image"]):
                 abort(400, "Invalid image ID format")
-            if not fs.exists(ObjectId(data["image"])):
-                abort(400, "Image not found")  
+            
+            image_id = ObjectId(data["image"])
+            image_file = fs.get(image_id)
+            
+            # Check image belongs to the restaurant
+            if image_file.metadata.get("restaurant_id") != restaurant_id:
+                abort(403, "Image does not belong to this restaurant")
 
+        # Verify restaurant ownership
         restaurant = mongo.db.restaurants.find_one({
-            "_id": ObjectId(data["restaurant_id"]),
+            "_id": restaurant_id,
             "owner_id": ObjectId(get_jwt_identity()),
             "status": "approved"
         })
         if not restaurant:
-            return jsonify({"error": "Invalid restaurant or permissions"}), 403
+            abort(403, "Invalid restaurant or permissions")
 
+        # Create menu item
         menu_item = {
             "name": bleach.clean(data["name"]).strip(),
             "description": bleach.clean(data.get("description", "")).strip(),
             "price": float(data["price"]),
-             "image": ObjectId(data["image"]) if data.get("image") else None, 
-            "restaurant_id": ObjectId(data["restaurant_id"]),
+            "image": image_id,
+            "restaurant_id": restaurant_id,
             "created_at": datetime.now(timezone.utc)
         }
-        
-       
 
         result = mongo.db.menu_items.insert_one(menu_item)
         return jsonify({"id": str(result.inserted_id)}), 201
+
+    except PyMongoError as e:
+        app.logger.error(f"Menu item database error: {str(e)}")
+        return jsonify({"error": "Creation failed"}), 500
     except Exception as e:
         app.logger.error(f"Menu item error: {str(e)}")
         return jsonify({"error": "Creation failed"}), 500
@@ -1025,7 +1299,8 @@ def delete_review(id):
 @has_role("Admin")
 def admin_get_users():
     try:
-        users = list(mongo.db.users.find({}, {"password": 0}))
+        users = list(mongo.db.users.find({}, {"password": 0,"encrypted_ssn": 0,
+            "encrypted_business_license": 0}))
         return jsonify(json.loads(dumps(users))), 200
     except Exception as e:
          app.logger.error(f"Error: {str(e)}")
@@ -1088,7 +1363,22 @@ def update_user_role_handler(id):
 @has_role("Admin")
 def delete_user(id):
     try:
-        mongo.db.users.delete_one({"_id": ObjectId(id)})
+        target_id = ObjectId(id)
+        mongo.db.restaurants.update_many(
+            {"owner_id": target_id},
+            {"$set": {"status": "deleted"}}
+        )
+
+        mongo.db.users.delete_one({"_id": target_id})
+
+        # Delete associated data    
+        mongo.db.restaurants.delete_many({"owner_id": target_id})
+        mongo.db.menu_items.delete_many({"restaurant_id": target_id})
+        mongo.db.reviews.delete_many({"user_id": target_id})
+        mongo.db.reservations.delete_many({"user_id": target_id})
+
+
+
         log_admin_action("user_deletion", "user", id)
         return jsonify({"message": "User deleted"}), 200
     except Exception as e:
@@ -1196,7 +1486,7 @@ def admin_get_restaurants():
             query['$or'] = [
                 {'name': {'$regex': re.escape(search), '$options': 'i'}},
                 {'address': {'$regex': re.escape(search), '$options': 'i'}},
-                {'city/location': {'$regex': re.escape(search), '$options': 'i'}},
+                {'city': {'$regex': re.escape(search), '$options': 'i'}},
                 {'cuisine': {'$regex': re.escape(search), '$options': 'i'}}
             ]
 
@@ -1204,7 +1494,7 @@ def admin_get_restaurants():
         restaurants = list(mongo.db.restaurants.find(query)
                           .skip((page-1)*per_page)
                           .limit(per_page))
-
+        restaurants = list(mongo.db.restaurants.find(query, {"owner_id": 0, "admin_notes": 0}))
         return jsonify({
             'data': json.loads(dumps(restaurants)),
             'pagination': {
@@ -1232,6 +1522,11 @@ def approve_restaurant_handler(id):
                 "updated_at": datetime.now(timezone.utc)
             }}
         )
+        log_admin_action(
+            action_type="restaurant_approval",
+            target_type="restaurant",
+            target_id=id
+        )
         return jsonify({"message": "Restaurant approved"}), 200
     except Exception as e:
          app.logger.error(f"Error: {str(e)}")
@@ -1250,6 +1545,11 @@ def reject_restaurant_handler(id):
                 "updated_at": datetime.now(timezone.utc)
             }}
         )
+        log_admin_action(
+            action_type="restaurant_rejection",
+            target_type="restaurant",
+            target_id=id
+        )
         return jsonify({"message": "Restaurant rejected"}), 200
     except Exception as e:
          app.logger.error(f"Error: {str(e)}")
@@ -1260,31 +1560,78 @@ def reject_restaurant_handler(id):
 @jwt_required()
 def profile():
     try:
+        cipher = Fernet(os.getenv("ENCRYPTION_KEY"))
         user_id = ObjectId(get_jwt_identity())
+        user = mongo.db.users.find_one({"_id": user_id})
+
+        if not user:
+            abort(404, "User not found")
+
         if request.method == "GET":
-            user = mongo.db.users.find_one({"_id": user_id}, {"password": 0})
-            return jsonify(json.loads(dumps(user))) if user else abort(404)
-        
+            # Base response without sensitive data
+            response_data = {
+                "id": str(user["_id"]),
+                "first_name": user["first_name"],
+                "last_name": user["last_name"],
+                "email": user["email"],
+                "role": user["role"],
+                "created_at": user["created_at"].isoformat()
+            }
+
+            # Add decrypted fields for restaurant owners
+            if user["role"] == "Restaurant Owner":
+                try:
+                    response_data["ssn"] = cipher.decrypt(user["encrypted_ssn"].encode()).decode()
+                    response_data["business_license"] = cipher.decrypt(user["encrypted_business_license"].encode()).decode()
+                except Exception as e:
+                    app.logger.error(f"Decryption error: {str(e)}")
+                    response_data.update({
+                        "ssn": "ENCRYPTED",
+                        "business_license": "ENCRYPTED"
+                    })
+
+            return jsonify(response_data)
+
         elif request.method == "PUT":
             data = request.get_json()
-            allowed_fields = ["first_name", "last_name", "email"]
-            updates = {k: bleach.clean(v).strip() for k, v in data.items() if k in allowed_fields}
+            updates = {
+                "first_name": bleach.clean(data.get("first_name", user["first_name"])).strip(),
+                "last_name": bleach.clean(data.get("last_name", user["last_name"])).strip(),
+                "email": bleach.clean(data.get("email", user["email"])).lower().strip()
+            }
+
+            # Handle restaurant owner specific fields
+            is_upgrade_request = data.get("role_upgrade_request", False)
+            if user["role"] == "Restaurant Owner" or is_upgrade_request:
+                cipher = Fernet(os.getenv("ENCRYPTION_KEY"))
+                required_business_fields = {
+                    "ssn": data.get("ssn"),
+                "business_license": data.get("business_license")
+            }
             
-            if "email" in updates:
-                existing = mongo.db.users.find_one({"email": updates["email"]})
-                if existing and existing["_id"] != user_id:
+            if None in required_business_fields.values():
+                abort(400, "SSN and Business License required for restaurant owners")
+            
+            updates.update({
+                "encrypted_ssn": cipher.encrypt(required_business_fields["ssn"].encode()).decode(),
+                "encrypted_business_license": cipher.encrypt(required_business_fields["business_license"].encode()).decode()
+            })
+
+            # Email uniqueness check
+            if updates["email"] != user["email"]:
+                if mongo.db.users.find_one({"email": updates["email"]}):
                     return jsonify({"error": "Email already exists"}), 400
-            
+
             mongo.db.users.update_one(
                 {"_id": user_id},
                 {"$set": updates}
             )
-            return jsonify({"message": "Profile updated"}), 200
-            
-    except Exception as e:
-         app.logger.error(f"Error: {str(e)}")
-    return jsonify({"error": "Internal server error"}), 500
 
+            return jsonify({"message": "Profile updated successfully"}), 200
+
+    except Exception as e:
+        app.logger.error(f"Profile error: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
 # Saved Restaurants
 @app.route("/api/saved-restaurants", methods=["POST", "GET", "DELETE"])
 @jwt_required()
@@ -1337,12 +1684,21 @@ def refresh():
 @jwt_required()
 def logout():
     jti = get_jwt()["jti"]
+    exp_timestamp = get_jwt()["exp"]
+    exp_time = datetime.fromtimestamp(exp_timestamp, tz=timezone.utc)
+
     mongo.db.token_blocklist.insert_one({
         "jti": jti,
-        "exp": datetime.now(timezone.utc) + timedelta(hours=1)
+        "exp": exp_time
     })
     return jsonify(message="Logged out"), 200
-
+@app.route("/api/health")
+def health_check():
+    try:
+        mongo.db.command('ping')
+        return jsonify(status="OK"), 200
+    except PyMongoError:
+        return jsonify(status="Database error"), 500
 # Error Handlers
 
 @app.errorhandler(InvalidId)
@@ -1371,6 +1727,12 @@ def server_error(e):
 
 
 @app.after_request
+def add_security_headers(response):
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Content-Security-Policy"] = "default-src 'self'"
+    return response
+
 def log_response(response):
     """Log all requests and responses"""
     app.logger.debug(f"Request: {request.method} {request.path} | Response: {response.status_code}")
